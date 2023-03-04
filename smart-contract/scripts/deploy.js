@@ -13,16 +13,16 @@ async function main() {
 
   console.log("Dex Contract deployed to:", dex.address);
 
-  const token1 = ;
-  const token2 = ;
+  // const token1 = ;
+  // const token2 = ;
 
-  const LiquidityPoolContract = await hre.ethers.getContractFactory(
-    "LiquidityPool"
-  );
-  const liquidityPool = await LiquidityPoolContract.deploy(token1,token2);
-  await liquidityPool.deployed();
+  // const LiquidityPoolContract = await hre.ethers.getContractFactory(
+  //   "LiquidityPool"
+  // );
+  // const liquidityPool = await LiquidityPoolContract.deploy(token1,token2);
+  // await liquidityPool.deployed();
 
-  console.log("liquidityPool Contract deployed to:", liquidityPool.address);
+  // console.log("liquidityPool Contract deployed to:", liquidityPool.address);
 }
 
 main()
