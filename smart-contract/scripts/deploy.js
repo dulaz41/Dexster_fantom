@@ -13,16 +13,19 @@ async function main() {
 
   console.log("Dex Contract deployed to:", dex.address);
 
-  // const token1 = ;
-  // const token2 = ;
+  const DAI_Token = "0x82d984B5adfD7796D7fDFa4403726478dD341DE7";
+  const FTM_Token = "0x3c355d9327819F1cbD7A4650C51b5449ac285266";
 
-  // const LiquidityPoolContract = await hre.ethers.getContractFactory(
-  //   "LiquidityPool"
-  // );
-  // const liquidityPool = await LiquidityPoolContract.deploy(token1,token2);
-  // await liquidityPool.deployed();
+  const LiquidityPoolContract = await hre.ethers.getContractFactory(
+    "LiquidityPool"
+  );
+  const liquidityPool = await LiquidityPoolContract.deploy(
+    DAI_Token,
+    FTM_Token
+  );
+  await liquidityPool.deployed();
 
-  // console.log("liquidityPool Contract deployed to:", liquidityPool.address);
+  console.log("liquidityPool Contract deployed to:", liquidityPool.address);
 }
 
 main()
