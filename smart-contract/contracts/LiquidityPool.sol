@@ -2,7 +2,10 @@
 
 pragma solidity ^0.8.0;
 
-import "./IERC20.sol";
+import "./interfaces/IERC20.sol";
+import "./interfaces/IUniswapV2Router.sol";
+import "./interfaces/IUniswapV2Pair.sol";
+import "./interfaces/IUniswapV2Factory.sol";
 
 contract LiquidityPool {
     // ERC20 token state variables
@@ -12,9 +15,14 @@ contract LiquidityPool {
     // State variables for token reserves
     uint256 public reserve1;
     uint256 public reserve2;
-
     // State variables for liquidity shares
     uint256 public totalLiquidity;
+
+    address private constant ROUTER =
+        0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506; //0xF491e7B69E4244ad4002BC14e878a34207E38c29 - FTM;
+
+    address private constant WETH = 0x5B67676a984807a212b1c59eBFc9B3568a474F0a; //0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83 - WFTM;
+
     mapping(address => uint256) public userLiquidity;
 
     // Events
@@ -62,57 +70,66 @@ contract LiquidityPool {
     }
 
     // Function for user to swap tokens
-    // NOTE: Could possibly make this into 2 functions for gas saving
-    function swapTokens(
+    function swap(
         address _tokenIn,
-        uint256 _amountIn
-    ) external returns (uint256 _amountOut) {
-        require(
-            _tokenIn == address(token1) || _tokenIn == address(token2),
-            "Invalid Token Address"
-        );
+        address _tokenOut,
+        uint256 _amountIn,
+        uint256 _amountOutMin,
+        address _to
+    ) external {
+        IERC20(_tokenIn).transferFrom(msg.sender, address(this), _amountIn);
 
-        // Retrieve the "token in" token
-        bool isToken1 = _tokenIn == address(token1);
+        IERC20(_tokenIn).approve(ROUTER, _amountIn);
 
-        (uint256 _reserve1, uint256 _reserve2) = getReserves();
-
-        (
-            IERC20 tokenIn,
-            IERC20 tokenOut,
-            uint256 reserveIn,
-            uint256 reserveOut
-        ) = isToken1
-                ? (token1, token2, _reserve1, _reserve2)
-                : (token2, token1, _reserve2, _reserve1);
-
-        require(_amountIn > 0, "Insufficient Amount");
-        tokenIn.transferFrom(msg.sender, address(this), _amountIn);
-
-        // Calculate tokenIn with fee of 0.2%
-        uint256 _amountInWithFee = (_amountIn * 998) / 1000;
-
-        _amountOut =
-            (reserveOut * _amountInWithFee) /
-            (reserveIn + _amountInWithFee);
-
-        require(_amountOut < reserveOut, "Insufficient Liquidity");
-
-        // Transfer tokenOut to the user
-        tokenOut.transfer(msg.sender, _amountOut);
-
-        // Update the reserves
-        _update(
-            token1.balanceOf(address(this)),
-            token2.balanceOf(address(this))
+        address[] memory path;
+        if (_tokenIn == WETH || _tokenOut == WETH) {
+            path = new address[](2);
+            path[0] = _tokenIn;
+            path[1] = _tokenOut;
+        } else {
+            path = new address[](3);
+            path[0] = _tokenIn;
+            path[1] = WETH;
+            path[2] = _tokenOut;
+        }
+        IUniswapV2Router(ROUTER).swapExactTokensForTokens(
+            _amountIn,
+            _amountOutMin,
+            path,
+            _to,
+            block.timestamp
         );
     }
 
+    function getAmountOutMin(
+        address _tokenIn,
+        address _tokenOut,
+        uint256 _amountIn
+    ) external view returns (uint256) {
+        address[] memory path;
+        if (_tokenIn == WETH || _tokenOut == WETH) {
+            path = new address[](2);
+            path[0] = _tokenIn;
+            path[1] = _tokenOut;
+        } else {
+            path = new address[](3);
+            path[0] = _tokenIn;
+            path[1] = WETH;
+            path[2] = _tokenOut;
+        }
+
+        uint256[] memory amountOutMins = IUniswapV2Router(ROUTER).getAmountsOut(
+            _amountIn,
+            path
+        );
+        return amountOutMins[path.length - 1];
+    }
+
     // Function for user to add liquidity
-    function addLiquidity(
-        uint256 _amountToken1,
-        uint256 _amountToken2
-    ) external returns (uint256 _liquidityShares) {
+    function addLiquidity(uint256 _amountToken1, uint256 _amountToken2)
+        external
+        returns (uint256 _liquidityShares)
+    {
         // User sends both tokens to liquidity pool
         require(
             token1.transferFrom(msg.sender, address(this), _amountToken1),
@@ -123,6 +140,11 @@ contract LiquidityPool {
             "Token Transfer Failed"
         );
 
+        /*
+        Check if the ratio of tokens supplied is proportional
+        to reserve ratio to satisfy x * y = k for price to not
+        change if both reserves are greater than 0
+        */
         (uint256 _reserve1, uint256 _reserve2) = getReserves();
 
         if (_reserve1 > 0 || _reserve2 > 0) {
@@ -156,9 +178,15 @@ contract LiquidityPool {
         emit MintLpToken(msg.sender, _liquidityShares);
     }
 
-    function removeLiquidity(
-        uint256 _liquidityShares
-    ) external returns (uint256 _amountToken1, uint256 _amountToken2) {
+    /*
+    Function for user to remove liquidity
+    > dx = (S / TL) * x
+    > dy = (S / TL) * y
+    */
+    function removeLiquidity(uint256 _liquidityShares)
+        external
+        returns (uint256 _amountToken1, uint256 _amountToken2)
+    {
         require(
             userLiquidity[msg.sender] >= _liquidityShares,
             "Insufficient liquidity shares"
